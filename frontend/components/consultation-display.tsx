@@ -19,6 +19,8 @@ import {
   Info,
   ExternalLink
 } from 'lucide-react'
+import { ConsultationRegeneration, type ConsultationHistoryEntry } from '@/components/consultation-regeneration'
+import { ConsultationExport } from '@/components/consultation-export'
 
 // Types for consultation response
 export interface ConsultationResponse {
@@ -51,7 +53,13 @@ interface ConsultationDisplayProps {
   consultation: ConsultationResponse | null
   isLoading: boolean
   error: string | null
-  onRegenerate: () => void
+  onRegenerate: (newSymptoms: string, reason?: string) => Promise<void>
+  currentSymptoms: string
+  consultationHistory: ConsultationHistoryEntry[]
+  isRegenerating?: boolean
+  onViewHistory?: (entry: ConsultationHistoryEntry) => void
+  sessionId: string
+  analysisResult?: any
   className?: string
 }
 
@@ -113,7 +121,13 @@ export function ConsultationDisplay({
   consultation, 
   isLoading, 
   error, 
-  onRegenerate, 
+  onRegenerate,
+  currentSymptoms,
+  consultationHistory,
+  isRegenerating = false,
+  onViewHistory = () => {},
+  sessionId,
+  analysisResult,
   className = '' 
 }: ConsultationDisplayProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
@@ -190,11 +204,21 @@ export function ConsultationDisplay({
           </div>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button 
-              onClick={onRegenerate}
+              onClick={() => onRegenerate(currentSymptoms, 'Retry after error')}
               className="flex items-center gap-2"
+              disabled={isRegenerating}
             >
-              <RefreshCw className="w-4 h-4" />
-              Try Again
+              {isRegenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Retrying...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" />
+                  Try Again
+                </>
+              )}
             </Button>
             <Button 
               variant="outline"
@@ -432,18 +456,37 @@ export function ConsultationDisplay({
           </AlertDescription>
         </Alert>
 
-        {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t border-border/50">
-          <Button
-            onClick={onRegenerate}
-            variant="outline"
-            className="flex-1 h-12 font-semibold border-2 hover:bg-muted/50 transition-all duration-300"
-          >
-            <RefreshCw className="mr-2 h-5 w-5" />
-            Get New Consultation
-          </Button>
+        {/* Enhanced Action Buttons with Regeneration */}
+        <div className="pt-4 border-t border-border/50 space-y-4">
+          <ConsultationRegeneration
+            currentSymptoms={currentSymptoms}
+            consultationHistory={consultationHistory}
+            isRegenerating={isRegenerating}
+            onRegenerate={onRegenerate}
+            onViewHistory={onViewHistory}
+          />
+          
+          {/* Export and Sharing Options */}
+          {consultation.consultation && (
+            <ConsultationExport
+              consultation={{
+                success: true,
+                consultation: consultation.consultation,
+                metadata: consultation.metadata,
+                emergencyContacts: consultation.emergencyContacts
+              }}
+              symptoms={currentSymptoms}
+              sessionId={sessionId}
+              analysisResult={analysisResult}
+              consultationHistory={consultationHistory}
+            />
+          )}
+        </div>
+
+        {/* Healthcare Provider Button */}
+        <div className="flex justify-center pt-4">
           <Button 
-            className="flex-1 h-12 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all duration-300" 
+            className="w-full max-w-md h-12 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all duration-300" 
             onClick={() => window.open('https://www.practo.com/search/doctors?results_type=doctor&q=%5B%7B%22word%22%3A%22Dermatologist%22%2C%22autocompleted%22%3Atrue%2C%22category%22%3A%22subspeciality%22%7D%5D&city=Bangalore', '_blank')}
           >
             <Stethoscope className="mr-2 h-5 w-5" />

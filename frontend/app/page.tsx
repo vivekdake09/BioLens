@@ -21,6 +21,12 @@ import {
   type ConsultationResponse as ConsultationResponseType
 } from "@/lib/api-client"
 import { ConsultationDisplay, type ConsultationResponse } from "@/components/consultation-display"
+import { 
+  addConsultationToHistory, 
+  getConsultationHistory, 
+  getConsultationById,
+  type ConsultationHistoryEntry 
+} from "@/lib/consultation-history"
 
 export default function BioLensHome() {
   const [file, setFile] = useState<File | null>(null)
@@ -38,6 +44,8 @@ export default function BioLensHome() {
   const [consultation, setConsultation] = useState<ConsultationResponse | null>(null)
   const [isConsultationLoading, setIsConsultationLoading] = useState(false)
   const [consultationError, setConsultationError] = useState<string | null>(null)
+  const [consultationHistory, setConsultationHistory] = useState<ConsultationHistoryEntry[]>([])
+  const [isRegenerating, setIsRegenerating] = useState(false)
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -79,6 +87,8 @@ export default function BioLensHome() {
     setUploadedPublicId(null)
     setConsultation(null)
     setConsultationError(null)
+    setConsultationHistory([])
+    setIsRegenerating(false)
   }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -135,7 +145,7 @@ export default function BioLensHome() {
     }
   }
 
-  const generateConsultationForAnalysis = async (analysis: AnalysisResult, currentSymptoms: string) => {
+  const generateConsultationForAnalysis = async (analysis: AnalysisResult, currentSymptoms: string, regenerationReason?: string) => {
     setIsConsultationLoading(true)
     setConsultationError(null)
     
@@ -151,10 +161,34 @@ export default function BioLensHome() {
           emergencyContacts: consultationResponse.emergencyContacts
         }
         setConsultation(consultationData)
+        
+        // Add to history
+        const historyId = addConsultationToHistory(
+          consultationResponse,
+          currentSymptoms,
+          sessionId,
+          analysis,
+          regenerationReason
+        )
+        
+        // Update history state
+        setConsultationHistory(getConsultationHistory(sessionId))
+        
         console.log('✅ Consultation generated successfully')
       } else if (consultationResponse.fallbackConsultation) {
         // Handle fallback consultation
         setConsultation(consultationResponse.fallbackConsultation)
+        
+        // Add fallback to history
+        addConsultationToHistory(
+          consultationResponse.fallbackConsultation,
+          currentSymptoms,
+          sessionId,
+          analysis,
+          regenerationReason || 'Fallback consultation used'
+        )
+        setConsultationHistory(getConsultationHistory(sessionId))
+        
         console.log('✅ Fallback consultation provided')
       } else {
         throw new Error(consultationResponse.error || 'Failed to generate consultation')
@@ -167,9 +201,27 @@ export default function BioLensHome() {
     }
   }
 
-  const handleRegenerateConsultation = async () => {
+  const handleRegenerateConsultation = async (newSymptoms: string, reason?: string) => {
     if (!analysisResult) return
-    await generateConsultationForAnalysis(analysisResult, symptoms)
+    
+    setIsRegenerating(true)
+    setSymptoms(newSymptoms) // Update symptoms state
+    
+    try {
+      await generateConsultationForAnalysis(analysisResult, newSymptoms, reason)
+    } finally {
+      setIsRegenerating(false)
+    }
+  }
+
+  const handleViewHistory = (entry: ConsultationHistoryEntry) => {
+    // Set the historical consultation as current
+    setConsultation({
+      consultation: entry.consultation.consultation!,
+      metadata: entry.consultation.metadata!,
+      emergencyContacts: entry.consultation.emergencyContacts
+    })
+    setSymptoms(entry.symptoms)
   }
 
   return (
@@ -473,6 +525,12 @@ export default function BioLensHome() {
                     isLoading={isConsultationLoading}
                     error={consultationError}
                     onRegenerate={handleRegenerateConsultation}
+                    currentSymptoms={symptoms}
+                    consultationHistory={consultationHistory}
+                    isRegenerating={isRegenerating}
+                    onViewHistory={handleViewHistory}
+                    sessionId={sessionId}
+                    analysisResult={analysisResult}
                   />
                 </div>
 
@@ -505,6 +563,8 @@ export default function BioLensHome() {
                       setUploadedPublicId(null)
                       setConsultation(null)
                       setConsultationError(null)
+                      setConsultationHistory([])
+                      setIsRegenerating(false)
                     }}
                     variant="outline"
                     className="flex-1 h-12 font-semibold border-2 hover:bg-muted/50 transition-all duration-300"
