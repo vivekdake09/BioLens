@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # API Configuration
     api_title: str = "BioLens API"
     api_version: str = "0.1.0"
-    debug: bool = False
+    debug: bool = True  # Default to True for development
     
     # Database Configuration
     redis_url: str = "redis://localhost:6379"
